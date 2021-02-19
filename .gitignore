@@ -138,3 +138,5 @@ dmypy.json
 cython_debug/
 
 .vscode/*
+spotify_keys/clientid_ez.txt
+spotify_keys/clientsecret_ez.txt
