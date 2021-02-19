@@ -1,0 +1,6 @@
+name: musicquiz
+dependencies:
+  - pip
+  - jupyter
+  - pip:
+    - -r file:requirements.txt
