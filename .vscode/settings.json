@@ -1,3 +1,36 @@
 {
-    "python.pythonPath": "/usr/local/Caskroom/miniconda/base/envs/musicquiz/bin/python"
+    "python.pythonPath": "/usr/local/Caskroom/miniconda/base/envs/musicquiz/bin/python",
+    "appService.zipIgnorePattern": [
+        "__pycache__{,/**}",
+        "*.py[cod]",
+        "*$py.class",
+        ".Python{,/**}",
+        "build{,/**}",
+        "develop-eggs{,/**}",
+        "dist{,/**}",
+        "downloads{,/**}",
+        "eggs{,/**}",
+        ".eggs{,/**}",
+        "lib{,/**}",
+        "lib64{,/**}",
+        "parts{,/**}",
+        "sdist{,/**}",
+        "var{,/**}",
+        "wheels{,/**}",
+        "share/python-wheels{,/**}",
+        "*.egg-info{,/**}",
+        ".installed.cfg",
+        "*.egg",
+        "MANIFEST",
+        ".env{,/**}",
+        ".venv{,/**}",
+        "env{,/**}",
+        "venv{,/**}",
+        "ENV{,/**}",
+        "env.bak{,/**}",
+        "venv.bak{,/**}",
+        ".vscode{,/**}"
+    ],
+    "appService.defaultWebAppToDeploy": "/subscriptions/be0efd03-3b91-4a6e-ad28-614f0ff9d938/resourceGroups/music-quiz/providers/Microsoft.Web/sites/musikquiz",
+    "appService.deploySubpath": "."
 }
