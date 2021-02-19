@@ -1,5 +1,6 @@
 name: musicquiz
 dependencies:
+  - python=3.8
   - pip
   - jupyter
   - pip:
