@@ -5,3 +5,4 @@ dependencies:
   - jupyter
   - pip:
     - -r file:requirements.txt
+    - fuzzywuzzy
