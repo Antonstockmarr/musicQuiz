@@ -1,11 +1,12 @@
 # bot.py
 from asyncio.tasks import sleep
 import os
-
+import math
 import operator
 import random
 import discord
 from discord import player
+from discord.flags import PublicUserFlags
 from dotenv import load_dotenv
 from fuzzywuzzy import fuzz
 
@@ -28,23 +29,25 @@ class MusicQuiz:
         
         self.playlist_id = playlist_id
         self.tracks = []
-        #TODO: fix track limit
-        n_tracks_limit = 10
-    
+
+        n_tracks_limit = 100
+
         offset = 0
         playlist_info = self.sp.playlist_items(self.playlist_id,
-                                 offset=offset,
+                                 offset=0,
                                  limit = n_tracks_limit,
                                  fields='items.track.id, items.track.name, items.track.artists,total',
                                  additional_types=['track'])
     
         self.n_songs = len(playlist_info['items'])
 
+        self.player_scores = {}
+
         for i in range(self.n_songs):
             id = playlist_info['items'][i]['track']['id']
             artist = playlist_info['items'][i]['track']['artists'][0]['name']
             track_name = playlist_info['items'][i]['track']['name']
-            self.tracks.append({'id': id, 'artist': artist.lower(), 'track_name': track_name.lower()})
+            self.tracks.append({'id': id, 'artist': artist, 'track_name': track_name})
         
         print('Playlist med %d tracks er blevet loadet' % self.n_songs)
 
@@ -53,12 +56,19 @@ class MusicQuiz:
         artist = self.current_artist.lower().strip()
         track_name = self.current_track_name.lower().strip()
 
+        track_name_splitted = track_name.split('-')
+        track_name = track_name_splitted[0]
+
+        track_name_splitted = track_name.split('(')
+        track_name = track_name_splitted[0]
+
+        track_name_splitted = track_name.split('/')
+        track_name = track_name_splitted[0]
+
         guess = guess.lower().strip()
 
-        artist_correct = fuzz.partial_ratio(guess, artist) > 90
-        track_name_correct = fuzz.partial_ratio(guess, track_name) > 90
-
-        #TODO: Scores
+        artist_correct = fuzz.ratio(guess, artist) > 90
+        track_name_correct = fuzz.ratio(guess, track_name) > 90
 
         return artist_correct, track_name_correct
 
@@ -67,6 +77,7 @@ class MusicQuiz:
         playlist_id,
         voice_channel, 
         text_channel, 
+        number_of_rounds, 
         hidden_channel_name="hidden",
     ):
 
@@ -79,6 +90,10 @@ class MusicQuiz:
             )
 
         self.load_playlist_data(playlist_id=playlist_id)
+
+        self.rounds_total = min(len(self.tracks), number_of_rounds)
+        self.current_round = 0
+
         random.shuffle(self.tracks)
 
         self.tracks_iter = iter(self.tracks)
@@ -92,33 +107,46 @@ class MusicQuiz:
 
         self.current_track = None
 
-        #TODO: get current members in voice channel and 0-init dict
-        self.player_scores = {
-            "Anton" : 1000,
-            "Søren" : 2,
-            "Simon" : 2,
-            "Elizabeth" : 2
-        }
-
-        ## Get players, reset score, print welcome message...
-        
         return [voice_channel.connect()]
+        ## Get players, reset score, print welcome message...
+
+    def exit_(self):
+
+        return (
+            [self.text_channel.send(f':fireworks: The music quiz is done!  See final standings below :fireworks:')]
+         + self.scoreboard_("Final standings:")
+         + self.stop_()
+        )
 
     def guess_(self, guess, player):
 
         artist_correct, track_name_correct = self.check_guess(guess)
+        
+        awaitables = []
 
         if not self.artist_guessed and artist_correct:
             self.artist_guessed = True
+            try:
+                self.player_scores[player] += 1
+            except KeyError:
+                self.player_scores[player] = 1
+
+            awaitables.append(self.text_channel.send(f':partying_face::musical_note: {player} correctly guessed the artist as "{self.current_artist}" ! Good job!'),)
             # Give point...
         if not self.track_name_guessed and track_name_correct:
             self.track_name_guessed = True
+            try:
+                self.player_scores[player] += 1
+            except KeyError:
+                self.player_scores[player] = 1
+
+            awaitables.append(self.text_channel.send(f':partying_face::musical_note: {player} correctly guessed the song name as "{self.current_track_name}" ! Good job!'),)
+            
 
         if self.artist_guessed and self.track_name_guessed:
-            return self.next_round_()
+            return awaitables + [asyncio.sleep(4)] + self.next_round_()
         else:
-            return []
-
+            return awaitables
 
     def stop_(self):
             
@@ -134,25 +162,56 @@ class MusicQuiz:
         ]
 
     def next_round_(self):
-
-        #TODO: current round flag
-        next_song = next(self.tracks_iter)
         
+        if self.current_round >= self.rounds_total:
+            return self.exit_()
+
+        self.current_round += 1
+
+        try:
+            next_song = next(self.tracks_iter)
+        except StopIteration:
+            return self.exit_()
+
         self.current_id = next_song["id"]
         self.current_artist = next_song["artist"]
         self.current_track_name = next_song["track_name"]
+        self.current_skippers = set()
 
         self.artist_guessed = False
         self.track_name_guessed = False
 
         return (
-            self.play_song_(f"{self.current_artist} {self.current_track_name}")
-            + self.scoreboard_(desc="Current standings:")
+            self.scoreboard_(desc="Current standings:")
+            + [self.hidden_channel.send(f"/stop")]
+            + [self.text_channel.send(f"Round {self.current_round}/{self.rounds_total}! :musical_note: Can you guess the song...?")]
+            + [asyncio.sleep(1)]
+            + [self.text_channel.send(f":three:")]
+            + [asyncio.sleep(1)]
+            + [self.text_channel.send(f":two:")]
+            + [asyncio.sleep(1)]
+            + [self.text_channel.send(f":one:")]
+            + [asyncio.sleep(1)]
+            + [self.text_channel.send(f"Guess! :arrow_forward: :musical_note: :ear:")]
+            + self.play_song_(f"{self.current_artist} {self.current_track_name}")
         )
+
+    def skip_(self, id_):
+
+        self.current_skippers.add(id_)
+
+        if ( len(self.voice_channel.voice_states) - 2 ) / 2 > len(self.current_skippers):
+            return [self.text_channel.send(f"{len(self.current_skippers)} voted to skip. Need {math.ceil((len(self.voice_channel.voice_states) - 2 ) / 2)} people in order to skip track")]
+        else:
+            return [self.text_channel.send(f"Track skipped! ({self.current_track_name} by {self.current_artist})")] + self.next_round_()
 
     def scoreboard_(self, desc=None):
 
         player_scores = self.player_scores
+
+        if len(player_scores) == 0:
+            return []
+
         players = player_scores.keys()
 
         sorted_scores = sorted(player_scores.items(), key=lambda x: -x[1])
@@ -185,12 +244,21 @@ async def on_message(message):
 
     if message.content.startswith('~start'):
 
-        _, playlist_id = message.content.split()
+        args = message.content.split()
+        if len(args) == 1:
+            await message.channel.send("Please specify spotify playlist id!")
+        elif len(args) == 2:
+            playlist_id = args[1]
+            number_of_rounds = 15
+        elif len(args) == 3:
+            playlist_id = args[1]
+            number_of_rounds = int(args[2])
 
         for awaitable in mq.start_quiz_(
             playlist_id=playlist_id,
             voice_channel=author.voice.channel,
             text_channel=message.channel,
+            number_of_rounds=number_of_rounds,
             hidden_channel_name="hidden",
             ):
             await awaitable
@@ -198,9 +266,9 @@ async def on_message(message):
         for awaitable in mq.next_round_():
             await awaitable
 
-    elif message.content == "~next round":
+    elif message.content == "~skip":
 
-        for awaitable in mq.next_round_():
+        for awaitable in mq.skip_(message.author.id):
             await awaitable
 
     elif message.content.startswith('~score'):
@@ -219,7 +287,7 @@ async def on_message(message):
             return
 
         guess = message.content
-        player = message.author.id
+        player = message.author.display_name
         for awaitable in mq.guess_(guess, player):
             await awaitable
 
