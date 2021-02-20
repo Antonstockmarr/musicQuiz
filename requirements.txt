@@ -2,4 +2,6 @@ spotipy
 flask
 gunicorn
 python-dotenv
+discord
+fuzzywuzzy
 -e .
